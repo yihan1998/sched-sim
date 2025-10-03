@@ -8,6 +8,10 @@ class Timer:
     """
     elapsed = 0
 
+    def reset(self):
+        """ Reset clock to zero. """
+        self.elapsed = 0
+
     def increment(self, amount):
         """ Increment clock by specified amount. """
         self.elapsed += amount
