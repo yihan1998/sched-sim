@@ -1,6 +1,8 @@
 # Created by https://www.toptal.com/developers/gitignore/api/python,linux,macos
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,linux,macos
 
+results/*
+
 ### Linux ###
 *~
 
