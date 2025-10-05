@@ -13,6 +13,7 @@ class Worker:
 
         self.preemption_timer_on = False
         self.preemption_timer = Timer()
+        self.deadline_signal = False  # Signal for deadline-critical task waiting
 
         self.config = config
         self.state = state
@@ -25,6 +26,10 @@ class Worker:
         current = self.current_task
         self.current_task.process(time_increment=time_increment)
         if self.current_task.complete:
+            # Record successful completion in central scheduler
+            if hasattr(self.state, 'central_scheduler') and self.state.central_scheduler:
+                self.state.central_scheduler.record_task_completion(self.id, self.current_task)
+            
             self.current_task = None
             if self.config.local_preemption and self.preemption_timer_on:
                 self.preemption_timer_on = False
@@ -41,17 +46,47 @@ class Worker:
 
     def schedule(self, time_increment=1):
         if self.is_busy():
-            self.process_task(time_increment=time_increment)
+            # Check for deadline signal - preempt current task if deadline-critical task is waiting
+            if self.deadline_signal and self.has_priority_task_waiting():
+                logging.debug("[PREEMPT DEADLINE]: Worker {} preempting {} for deadline-critical task".format(self.id, self.current_task))
+                
+                # Record requeue event in central scheduler only for capacity-aware scheduling
+                if (hasattr(self.state, 'central_scheduler') and self.state.central_scheduler and 
+                    self.config.join_shortest_queue_by_capacity):
+                    self.state.central_scheduler.record_requeue(self.id, self.current_task)
+                
+                if self.config.global_queue and self.state.main_queue is not None:
+                    self.state.main_queue.enqueue(self.current_task)
+                elif (self.config.join_shortest_queue or self.config.join_shortest_queue_by_capacity) and self.queue is not None:
+                    self.queue.enqueue(self.current_task)
+                
+                self.current_task = None
+                self.deadline_signal = False  # Reset signal
+                if self.preemption_timer_on:
+                    self.preemption_timer_on = False
+                    self.preemption_timer.reset()
+            
+            # Process current task if not preempted
+            if self.current_task:
+                self.process_task(time_increment=time_increment)
+                
+            # Handle regular preemption timer
             if self.preemption_timer_on:
                 self.preemption_timer.increment(time_increment)
                 if self.preemption_timer.get_time() >= self.config.PREEMPTION_TIME:
                     logging.debug("[PREEMPT]: Worker {} preempting {}".format(self.id, self.current_task))
+                    
+                    # Record requeue event in central scheduler only for capacity-aware scheduling
+                    if (hasattr(self.state, 'central_scheduler') and self.state.central_scheduler and 
+                        self.config.join_shortest_queue_by_capacity):
+                        self.state.central_scheduler.record_requeue(self.id, self.current_task)
+                    
                     if self.config.global_queue and self.state.main_queue is not None:
                         self.state.main_queue.enqueue(self.current_task)
                         self.current_task = None
                         self.preemption_timer_on = False
                         self.preemption_timer.reset()
-                    elif self.config.join_shortest_queue and self.queue is not None:
+                    elif (self.config.join_shortest_queue or self.config.join_shortest_queue_by_capacity) and self.queue is not None:
                         self.queue.enqueue(self.current_task)
                         self.current_task = None
                         self.preemption_timer_on = False
@@ -60,16 +95,22 @@ class Worker:
         else:
             if self.config.global_queue and self.state.main_queue.length() > 0:
                 self.current_task = self.dequeue_with_priority(self.state.main_queue)
-                if self.config.local_preemption:
-                    self.preemption_timer_on = True
-                logging.debug("[START]: Worker {} starting {}".format(self.id, self.current_task))
-                self.process_task(time_increment=time_increment)
-            elif self.config.join_shortest_queue and self.queue.length() > 0:
+                if self.current_task is not None:  # Safety check
+                    if self.config.local_preemption:
+                        self.preemption_timer_on = True
+                    logging.debug("[START]: Worker {} starting {}".format(self.id, self.current_task))
+                    self.process_task(time_increment=time_increment)
+                else:
+                    logging.debug("[ERROR]: Worker {} got None task from non-empty main queue".format(self.id))
+            elif (self.config.join_shortest_queue or self.config.join_shortest_queue_by_capacity) and self.queue.length() > 0:
                 self.current_task = self.dequeue_with_priority(self.queue)
-                if self.config.local_preemption:
-                    self.preemption_timer_on = True
-                logging.debug("[START]: Worker {} starting {}".format(self.id, self.current_task))
-                self.process_task(time_increment=time_increment)
+                if self.current_task is not None:  # Safety check
+                    if self.config.local_preemption:
+                        self.preemption_timer_on = True
+                    logging.debug("[START]: Worker {} starting {}".format(self.id, self.current_task))
+                    self.process_task(time_increment=time_increment)
+                else:
+                    logging.debug("[ERROR]: Worker {} got None task from non-empty queue".format(self.id))
 
     def dequeue_with_priority(self, queue):
         """Dequeue priority task if exists, otherwise normal FIFO."""
@@ -84,6 +125,11 @@ class Worker:
         
         # No priority task, normal dequeue
         return queue.dequeue()
+
+    def notify_deadline_critical_task(self):
+        """Notify worker that a deadline-critical task is waiting in the queue."""
+        self.deadline_signal = True
+        logging.debug(f"[DEADLINE SIGNAL]: Worker {self.id} notified of deadline-critical task")
 
     def has_priority_task_waiting(self):
         """Check if queue has a priority task."""

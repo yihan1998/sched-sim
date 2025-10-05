@@ -44,6 +44,15 @@ class Simulation:
                 if time_left <= self.config.GLOBAL_PREEMPTION_TIME and not job.priority_boost:
                     job.priority_boost = True
                     logging.debug(f"[DEADLINE CRITICAL]: Job {job.identifier} has {time_left} units left (deadline: {job.deadline})")
+                    
+                    # Notify workers that have deadline-critical tasks in their queues
+                    for worker in self.state.workers:
+                        queue_to_check = self.state.main_queue if self.config.global_queue else worker.queue
+                        if queue_to_check:
+                            for task in queue_to_check.queue:
+                                if hasattr(task, 'parent_job') and task.parent_job == job:
+                                    worker.notify_deadline_critical_task()
+                                    break
 
     def run(self):
         """Run the simulation."""
@@ -81,6 +90,11 @@ class Simulation:
             if self.config.deadline_aware_preemption and \
                self.state.timer.get_time() % self.config.GLOBAL_PREEMPTION_TIME == 0:
                 self.check_deadlines()
+
+            # Log central scheduler status periodically
+            if hasattr(self.state, 'central_scheduler') and self.state.central_scheduler and \
+               self.state.timer.get_time() % 10000 == 0:
+                self.state.central_scheduler.log_worker_status()
 
             # Schedule threads
             for worker in self.state.workers:
@@ -131,6 +145,12 @@ class Simulation:
         # Save global stats
         json.dump(self.state.results(), stats_file, indent=0)
         stats_file.close()
+        
+        # Save central scheduler stats if available
+        if hasattr(self.state, 'central_scheduler') and self.state.central_scheduler:
+            scheduler_stats_file = open("{}scheduler_stats.json".format(new_dir_name), "w")
+            json.dump(self.state.central_scheduler.get_worker_stats(), scheduler_stats_file, indent=0)
+            scheduler_stats_file.close()
 
         # # If recording work steal stats, save
         # if self.config.record_steals:

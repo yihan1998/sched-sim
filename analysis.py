@@ -39,6 +39,7 @@ def analyze_sim_run(run_name, output_file, print_results=False, time_dropped=0):
     worker_file.close()
 
     task_latencies = []
+    task_request_time = []
     job_latencies = []
 
     complete_tasks = stats["Completed Tasks"]
@@ -48,9 +49,10 @@ def analyze_sim_run(run_name, output_file, print_results=False, time_dropped=0):
     next(task_file) # skip first line
     for line in task_file:
         data = line.split(",")
-        if float(data[1]) > time_dropped * stats["End Time"] and float(data[2]) >= 0:
+        if float(data[1]) > time_dropped * stats["End Time"] and float(data[2]) >= 0 and float(data[3]) >= 0:
             total_tasks += 1
             task_latencies.append(float(data[2]))
+            task_request_time.append(float(data[3]))
     task_percentiles = np.percentile(task_latencies, [25, 50, 75, 90, 95, 99, 99.9])
     task_average_latency = np.mean(task_latencies)
     task_min_latency = np.min(task_latencies)
@@ -69,6 +71,8 @@ def analyze_sim_run(run_name, output_file, print_results=False, time_dropped=0):
 
     workers = meta_data["num_workers"]
     avg_load = (busy_time / (workers * stats["End Time"]))
+
+    # print("average task time: {:.2f}".format(np.mean(task_request_time)))
 
     data_string = "{},{},{:.2f},{:.2f}," \
                 "{:.2f},{:.2f},{:.2f},{:.2f},{:.2f},{:.2f},{:.2f},{:.2f}," \

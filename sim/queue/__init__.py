@@ -4,10 +4,13 @@ class Queue:
         self.identifier = identifier
         self.queue = []
         self.worker_ids = []
+        self.assigned_worker = None  # Track the primary worker for this queue
 
     def set_worker(self, worker_id):
         """Add a thread to the set of threads corresponding to this queue."""
         self.worker_ids.append(worker_id)
+        if self.assigned_worker is None:
+            self.assigned_worker = worker_id  # Set the first worker as primary
 
     def head(self):
         """Return the first element of the queue."""

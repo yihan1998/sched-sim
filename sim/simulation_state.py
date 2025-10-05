@@ -12,6 +12,7 @@ from task import SubTask, Job
 from worker import Worker
 # from sim_thread import Thread
 from queue import Queue
+from central_scheduler import CentralScheduler
 import progress_bar as progress
 
 
@@ -36,6 +37,9 @@ class SimulationState:
         self.complete_job_count = 0
 
         self.config = config
+        
+        # Initialize central scheduler
+        self.central_scheduler = None
 
     def any_incomplete(self):
         """Return true if there are any incomplete tasks for the entire simulation."""
@@ -66,6 +70,10 @@ class SimulationState:
             queue = self.queues[config.mapping[i]]
             self.workers.append(Worker(queue, i, config, self))
             queue.set_worker(i)
+        
+        # Initialize central scheduler when JSQ is enabled (either regular or capacity-aware)
+        if config.join_shortest_queue or config.join_shortest_queue_by_capacity:
+            self.central_scheduler = CentralScheduler(config, self)
 
         # Set tasks and arrival times
         request_rate = config.avg_system_load * config.num_workers / (config.AVERAGE_SERVICE_TIME * config.num_subtasks_per_job)
@@ -102,6 +110,10 @@ class SimulationState:
                         x_min = target_mean * (alpha - 1) / alpha
                         u = random.random()
                         service_time = x_min / (u ** (1/alpha))
+                    elif config.lognormal_service_time:
+                        sigma = 0.25
+                        mu = math.log(config.AVERAGE_SERVICE_TIME) - (sigma**2) / 2
+                        service_time = random.lognormvariate(mu, sigma)
                     else:
                         service_time = int(random.expovariate(1 / config.AVERAGE_SERVICE_TIME))
 
@@ -129,6 +141,17 @@ class SimulationState:
         """Get the index of the queue with the shortest length (JSQ policy)."""
         if not self.queues:
             return 0
+        
+        # Check if we should use central scheduler
+        if hasattr(self, 'central_scheduler') and self.central_scheduler:
+            # Use capability-aware scheduling if enabled
+            if self.config.join_shortest_queue_by_capacity:
+                return self.central_scheduler.get_shortest_capable_queue()
+            # Use simple shortest queue with central scheduler tracking
+            elif self.config.join_shortest_queue:
+                return self.central_scheduler.get_shortest_queue_simple()
+        
+        # Fallback to original logic when no central scheduler
         return min(range(len(self.queues)), key=lambda i: self.queues[i].length())
     
     def add_final_stats(self):

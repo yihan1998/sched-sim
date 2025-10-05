@@ -122,16 +122,16 @@ class Job(Task):
         # Set deadline based on total work
         if self.config.deadline_aware_preemption and self.deadline is None:
             total_work = sum(st.service_time for st in self.subtasks)
-            self.deadline = self.arrival_time + 1000
+            self.deadline = self.arrival_time + self.config.GLOBAL_PREEMPTION_TIME
             logging.debug("[DEADLINE SET]: Job {} deadline at {} (total work: {})".format(
                 self.identifier, self.deadline, total_work))
 
         # Enqueue subtasks
         for subtask in self.subtasks:
-            if self.config.join_shortest_queue:
-                chosen_queue = self.state.get_shortest_queue()
+            if self.config.join_shortest_queue or self.config.join_shortest_queue_by_capacity:
+                chosen_queue = self.state.get_shortest_queue()  # This now uses central scheduler
                 self.state.queues[chosen_queue].enqueue(subtask)
-                logging.debug("[SCHEDULE]: Subtask of job {} assigned to queue {}".format(
+                logging.debug("[SCHEDULE]: Subtask of job {} assigned to queue {} (capability-aware)".format(
                     self.identifier, chosen_queue))
 
             elif self.config.global_queue:
