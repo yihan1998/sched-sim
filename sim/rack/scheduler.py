@@ -3,9 +3,96 @@
 
 import logging
 from collections import defaultdict, deque
+from worker import Worker
 import time
 
+class RackScheduler:
+    """
+    Rack scheduler that tracks requeue times at each worker and makes
+    intelligent scheduling decisions based on worker capability.
+    """
+    def __init__(self, workers, config, state):
+        self.workers = workers
 
+        # Track requeue events per worker
+        self.requeue_history = defaultdict(deque)  # worker_id -> deque of requeue timestamps
+        self.preemption_counts = defaultdict(int)  # worker_id -> count of preemptions
+        self.recent_requeue_counts = defaultdict(int)  # worker_id -> recent requeue count
+        
+        # Capability metrics
+        self.worker_capability_scores = defaultdict(float)  # worker_id -> capability score (0-1)
+        self.worker_stability = defaultdict(float)  # worker_id -> stability metric
+        
+        # Configuration parameters
+        self.requeue_history_window = config.REQUEUE_HISTORY_WINDOW if hasattr(config, 'REQUEUE_HISTORY_WINDOW') else 5000  # Time window to consider
+        self.stability_decay_factor = config.STABILITY_DECAY_FACTOR if hasattr(config, 'STABILITY_DECAY_FACTOR') else 0.95
+        self.capability_weight = config.CAPABILITY_WEIGHT if hasattr(config, 'CAPABILITY_WEIGHT') else 0.7
+        
+        # Initialize all workers with perfect capability
+        for worker in self.workers:
+            self.worker_capability_scores[worker.identifier] = 1.0
+            self.worker_stability[worker.identifier] = 1.0
+            
+        self.config = config
+        self.state = state
+
+    def get_best_worker_for_task(self, workers=None):
+        """
+        Get the best worker to assign a task to, considering both queue length 
+        and worker capability.
+        """
+        if not workers:
+            return 0
+        
+        best_worker_id = 0
+        best_score = float('-inf')
+        
+        for worker in workers:
+            worker_id = worker.identifier
+            queue = worker.queue
+            
+            # Get queue length
+            queue_length = queue.length() + int(worker.is_busy()) if queue else 0
+            
+            # Get worker capability
+            capability = self.worker_capability_scores[worker_id]
+            
+            # Calculate composite score:
+            # Higher capability is better (positive), shorter queue is better (negative queue length)
+            # We want to balance between capability and queue length
+            queue_penalty = queue_length * 2.0  # Weight queue length more heavily
+            capability_bonus = capability * 10.0  # Scale capability appropriately
+            
+            composite_score = capability_bonus - queue_penalty
+            
+            logging.debug(f"[SCHEDULER]: Worker {worker_id} - queue_len: {queue_length}, preemptions: {self.preemption_counts[worker_id]}, "
+                         f"capability: {capability:.3f}, score: {composite_score:.3f}")
+            
+            if composite_score > best_score:
+                best_score = composite_score
+                best_worker_id = worker_id
+        
+        logging.debug(f"[SCHEDULER]: Selected worker {best_worker_id} with score {best_score:.3f}")
+        return best_worker_id
+    
+    def get_shortest_queue(self, workers=None):
+        if self.config.join_shortest_estimated_delay_queue:
+            if not workers:
+                return 0
+
+            # Find the worker ID with the best score
+            best_worker_id = self.get_best_worker_for_task(workers)
+            logging.debug(f"[SCHEDULER]: Best worker ID for task: {best_worker_id}")
+            
+            # Map worker ID to queue index using the mapping
+            if best_worker_id < len(self.config.mapping):
+                return self.config.mapping[best_worker_id]
+            
+            return min(range(len(self.state.queues)), key=lambda i: self.state.queues[i].length() + int(self.state.workers[i].is_busy()))
+        elif self.config.join_shortest_queue:
+            if not self.state.queues:
+                return 0
+            return min(range(len(self.state.queues)), key=lambda i: self.state.queues[i].length() + int(self.state.workers[i].is_busy()))
 class CentralScheduler:
     """
     Central scheduler that tracks requeue times at each worker and makes 
@@ -32,8 +119,8 @@ class CentralScheduler:
         
         # Initialize all workers with perfect capability
         for worker in state.workers:
-            self.worker_capability_scores[worker.id] = 1.0
-            self.worker_stability[worker.id] = 1.0
+            self.worker_capability_scores[worker.identifier] = 1.0
+            self.worker_stability[worker.identifier] = 1.0
     
     def record_requeue(self, worker_id, task):
         """Record a requeue event for a worker."""
@@ -96,11 +183,11 @@ class CentralScheduler:
         best_score = float('-inf')
         
         for worker in self.state.workers:
-            worker_id = worker.id
+            worker_id = worker.identifier
             queue = worker.queue
             
             # Get queue length
-            queue_length = queue.length() if queue else 0
+            queue_length = queue.length() + int(worker.is_busy()) if queue else 0
             
             # Get worker capability
             capability = self.worker_capability_scores[worker_id]
@@ -113,7 +200,7 @@ class CentralScheduler:
             
             composite_score = capability_bonus - queue_penalty
             
-            logging.debug(f"[SCHEDULER]: Worker {worker_id} - queue_len: {queue_length}, "
+            logging.debug(f"[SCHEDULER]: Worker {worker_id} - queue_len: {queue_length}, preemptions: {self.preemption_counts[worker_id]}, "
                          f"capability: {capability:.3f}, score: {composite_score:.3f}")
             
             if composite_score > best_score:
@@ -144,7 +231,7 @@ class CentralScheduler:
     def get_shortest_queue_simple(self):
         """
         Original shortest queue logic - just returns the queue with minimum length.
-        Used when join_shortest_queue=True but join_shortest_queue_by_capacity=False.
+        Used when join_shortest_queue=True but join_shortest_estimated_delay_queue=False.
         """
         if not self.state.queues:
             return 0

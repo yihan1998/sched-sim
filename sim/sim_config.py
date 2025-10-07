@@ -2,14 +2,15 @@ import random
 
 class SimConfig:
     """Object to hold all configuration state of the simulation. Remains constant."""
-    def __init__(self, name=None, num_queues=None, num_workers=None, mapping=[], 
+    def __init__(self, name=None, num_racks=None, num_queues=None, num_workers=None, mapping=[], 
                  avg_system_load=None, initial_num_tasks=None, sim_duration=None,
                  constant_service_time=False, bimodal_service_time=False, pareto_service_time=False, lognormal_service_time=False,
                  pb_enabled=True, num_subtasks_per_job=None,
-                 join_shortest_queue=False, join_shortest_queue_by_capacity=False, global_queue=False, 
+                 join_shortest_queue=False, join_shortest_estimated_delay_queue=False, global_queue=False, 
                  local_preemption=False, deadline_aware_preemption=False):
         # Basic simulation parameters
         self.name = name
+        self.num_racks = num_racks
         self.num_queues = num_queues
         self.num_workers = num_workers
         self.mapping = list(mapping)
@@ -24,7 +25,7 @@ class SimConfig:
         self.lognormal_service_time = lognormal_service_time
         self.progress_bar = pb_enabled
         self.join_shortest_queue = join_shortest_queue
-        self.join_shortest_queue_by_capacity = join_shortest_queue_by_capacity
+        self.join_shortest_estimated_delay_queue = join_shortest_estimated_delay_queue
         self.global_queue = global_queue
         self.local_preemption = local_preemption
         self.deadline_aware_preemption = deadline_aware_preemption

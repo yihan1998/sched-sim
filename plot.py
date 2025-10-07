@@ -4,24 +4,24 @@ import matplotlib.pyplot as plt
 # List of filenames and labels
 files = [
     # "global-ddl-aware-out",
-    # "jsq-capability-ddl-aware-out",
-    "jsq-ddl-aware-out",
+    # "jsq-by-capacity-ddl-aware-out",
+    # "jsq-ddl-aware-out",
     "global-local-preempt-out",
-    "jsq-capability-local-preempt-out",
-    "jsq-local-preempt-out",
-    # "global-no-preempt-out",
-    # "jsq-capability-no-preempt-out",
+    # "jsedq-local-preempt-out",
+    # "jsq-local-preempt-out",
+    "global-no-preempt-out",
+    # "jsedq-no-preempt-out",
     # "jsq-no-preempt-out"
 ]
 labels = [
     # "Global DDL Aware",
-    # "JSQ Capability DDL Aware",
-    "JSQ DDL Aware",
+    # "JSEDQ DDL Aware",
+    # "JSQ DDL Aware",
     "Global Local Preempt",
-    "JSQ Capability Local Preempt",
-    "JSQ Local Preempt",
-    # "Global No Preempt",
-    # "JSQ Capability No Preempt",
+    # "JSEDQ Local Preempt",
+    # "JSQ Local Preempt",
+    "Global No Preempt",
+    # "JSEDQ No Preempt",
     # "JSQ No Preempt"
 ]
 
@@ -98,7 +98,7 @@ plt.savefig("p95_latency.png", dpi=500)
 plt.figure(figsize=(12, 8))
 for label, df in dataframes.items():
     plt.plot(df["Real Load"], df["99% Job Latency"], marker='o', label=label)
-plt.ylim(bottom=0)
+plt.ylim(bottom=0, top=20000)
 plt.xlabel("Real Load")
 plt.ylabel("99th Percentile Latency")
 plt.title("Real Load vs 99th Percentile Latency")

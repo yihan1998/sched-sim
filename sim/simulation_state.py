@@ -12,8 +12,9 @@ from task import SubTask, Job
 from worker import Worker
 # from sim_thread import Thread
 from queue import Queue
-from central_scheduler import CentralScheduler
+# from rack.scheduler import CentralScheduler
 import progress_bar as progress
+from rack import Rack
 
 
 class SimulationState:
@@ -21,6 +22,7 @@ class SimulationState:
     def __init__(self, config):
         # Simulation Global Variables
         self.timer = Timer()
+        self.racks = []
         self.workers = []
         self.queues = []
         self.jobs = []
@@ -70,13 +72,18 @@ class SimulationState:
             queue = self.queues[config.mapping[i]]
             self.workers.append(Worker(queue, i, config, self))
             queue.set_worker(i)
-        
+            
+        for i in range(config.num_racks):
+            rack_workers = self.workers[i * (config.num_workers // config.num_racks):(i + 1) * (config.num_workers // config.num_racks)]
+            rack = Rack(i, rack_workers, config, self)
+            self.racks.append(rack)
+
         # Initialize central scheduler when JSQ is enabled (either regular or capacity-aware)
-        if config.join_shortest_queue or config.join_shortest_queue_by_capacity:
-            self.central_scheduler = CentralScheduler(config, self)
+        # if config.join_shortest_queue or config.join_shortest_estimated_delay_queue:
+        #     self.central_scheduler = CentralScheduler(config, self)
 
         # Set tasks and arrival times
-        request_rate = config.avg_system_load * config.num_workers / (config.AVERAGE_SERVICE_TIME * config.num_subtasks_per_job)
+        request_rate = config.avg_system_load * config.num_workers * config.num_racks / (config.AVERAGE_SERVICE_TIME * config.num_subtasks_per_job)
         next_job_time = int(random.expovariate(request_rate))
         i = 0
         identifier = 1
@@ -101,11 +108,11 @@ class SimulationState:
                     if config.constant_service_time:
                         service_time = config.AVERAGE_SERVICE_TIME
                     elif config.bimodal_service_time:
-                        # 95% are 500, 5% are 5500
-                        distribution = [500] * 95 + [5500] * 5
+                        # 95% are 500, 5% are 10500
+                        distribution = [500] * 95 + [10500] * 5
                         service_time = random.choice(distribution)
                     elif config.pareto_service_time:
-                        alpha = 1.5
+                        alpha = 2.5
                         target_mean = config.AVERAGE_SERVICE_TIME
                         x_min = target_mean * (alpha - 1) / alpha
                         u = random.random()
@@ -123,7 +130,8 @@ class SimulationState:
                     arrival_time=next_job_time,
                     config=config,
                     state=self,
-                    parent_job=job
+                    parent_job=job,
+                    rack_id=i % config.num_racks
                 )
                 job.subtasks.append(subtask)
                 self.tasks.append(subtask)
@@ -145,7 +153,7 @@ class SimulationState:
         # Check if we should use central scheduler
         if hasattr(self, 'central_scheduler') and self.central_scheduler:
             # Use capability-aware scheduling if enabled
-            if self.config.join_shortest_queue_by_capacity:
+            if self.config.join_shortest_estimated_delay_queue:
                 return self.central_scheduler.get_shortest_capable_queue()
             # Use simple shortest queue with central scheduler tracking
             elif self.config.join_shortest_queue:
@@ -167,4 +175,3 @@ class SimulationState:
                  "Job Scheduled": self.jobs_scheduled, "Tasks Scheduled": self.tasks_scheduled,
                  "Simulation End Time": self.sim_end_time, "End Time": self.end_time}
         return stats
-        

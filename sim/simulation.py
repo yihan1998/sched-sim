@@ -54,6 +54,26 @@ class Simulation:
                                     worker.notify_deadline_critical_task()
                                     break
 
+    def is_majority_subtasks_finished(self, job):
+        """Check if the majority of subtasks in a job are finished."""
+        total_subtasks = len(job.subtasks)
+        completed_subtasks = sum(1 for subtask in job.subtasks if subtask.complete)
+        return completed_subtasks > total_subtasks / 2
+
+    def signal_remaining_job(self, job):
+        """Signal remaining subtasks of a job to boost their priority."""
+        for subtask in job.subtasks:
+            if not subtask.complete:
+                subtask.priority_boost = True
+                logging.debug(f"[SIGNAL SUBTASK]: Signaling SubTask {subtask.identifier} of Job {job.identifier} for priority boost")
+                
+                # Notify workers that have this subtask in their queues
+                for worker in self.state.workers:
+                    queue_to_check = self.state.main_queue if self.config.global_queue else worker.queue
+                    if queue_to_check and subtask in queue_to_check.queue:
+                        worker.notify_deadline_critical_task()
+                        break
+
     def run(self):
         """Run the simulation."""
 
@@ -89,12 +109,11 @@ class Simulation:
 
             if self.config.deadline_aware_preemption and \
                self.state.timer.get_time() % self.config.GLOBAL_PREEMPTION_TIME == 0:
-                self.check_deadlines()
-
-            # Log central scheduler status periodically
-            if hasattr(self.state, 'central_scheduler') and self.state.central_scheduler and \
-               self.state.timer.get_time() % 10000 == 0:
-                self.state.central_scheduler.log_worker_status()
+                # self.check_deadlines()
+            # if self.config.deadline_aware_preemption:
+                for job in self.on_the_fly_jobs:
+                    if self.is_majority_subtasks_finished(job):
+                        self.signal_remaining_job(job)
 
             # Schedule threads
             for worker in self.state.workers:

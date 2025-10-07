@@ -67,10 +67,13 @@ class Task:
         return str(self)
 
 class SubTask(Task):
-    def __init__(self, time, arrival_time, config, state, parent_job=None):
+    def __init__(self, time, arrival_time, config, state, parent_job=None, rack_id=None):
         super().__init__(time, arrival_time, config, state)
         self.identifier = parent_job.identifier if parent_job is not None else None
         self.parent_job = parent_job
+        self.priority_boost = False
+        self.rack_id = rack_id
+        self.worker_id = None
 
     def process(self, time_increment=1, stop_condition=None):
         """Process the task for given time step.
@@ -98,13 +101,13 @@ class SubTask(Task):
             self.identifier, self.arrival_time, self.service_time)
 
     def get_stats(self):
-        stats = [self.identifier, self.arrival_time, self.time_in_system(), self.service_time]
+        stats = [self.identifier, self.arrival_time, self.time_in_system(), self.service_time, self.rack_id, self.worker_id]
         stats = [str(x) for x in stats]
         return stats
 
     @staticmethod
     def get_stat_headers(config):
-        headers = ["Job ID", "Arrival Time", "Time in System", "Request Service Time"]
+        headers = ["Job ID", "Arrival Time", "Time in System", "Request Service Time", "Rack ID", "Worker ID"]
         return headers
 
 class Job(Task):
@@ -126,18 +129,15 @@ class Job(Task):
             logging.debug("[DEADLINE SET]: Job {} deadline at {} (total work: {})".format(
                 self.identifier, self.deadline, total_work))
 
-        # Enqueue subtasks
+        # Enqueue subtasks using Rack's schedule method
         for subtask in self.subtasks:
-            if self.config.join_shortest_queue or self.config.join_shortest_queue_by_capacity:
-                chosen_queue = self.state.get_shortest_queue()  # This now uses central scheduler
-                self.state.queues[chosen_queue].enqueue(subtask)
-                logging.debug("[SCHEDULE]: Subtask of job {} assigned to queue {} (capability-aware)".format(
-                    self.identifier, chosen_queue))
-
-            elif self.config.global_queue:
-                self.state.main_queue.enqueue(subtask)
-                logging.debug("[SCHEDULE]: Subtask of job {} assigned to main queue".format(
-                    self.identifier))
+            if subtask.rack_id is not None:
+                rack = self.state.racks[subtask.rack_id]
+                rack.schedule(subtask)
+                logging.debug("[SCHEDULE]: Subtask of job {} assigned to Rack {}".format(
+                    self.identifier, subtask.rack_id))
+            else:
+                logging.warning("[WARNING]: Subtask of job {} has no rack assigned".format(self.identifier))
 
     def on_complete(self):
         self.finished_subtasks += 1

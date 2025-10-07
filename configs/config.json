@@ -1,5 +1,6 @@
 {
-    "avg_system_load": 0.8,
+    "avg_system_load": 0.9,
+    "num_racks": 1,
     "num_queues": 32,
     "num_workers": 32,
     "mapping": [
@@ -37,17 +38,17 @@
         31
     ],
     "num_tasks": null,
-    "sim_duration": 10000000,
+    "sim_duration": 1000000,
     "num_subtasks_per_job": 4,
-    "deadline_aware_preemption": true,
+    "deadline_aware_preemption": false,
     "local_preemption": true,
-    "bimodal_service_time": false,
-    "pareto_service_time": true,
+    "bimodal_service_time": true,
+    "pareto_service_time": false,
     "lognormal_service_time": false,
     "join_shortest_queue": false,
-    "join_shortest_queue_by_capacity": true,
-    "global_queue": false,
+    "join_shortest_estimated_delay_queue": false,
+    "global_queue": true,
     "AVERAGE_SERVICE_TIME": 1000,
-    "GLOBAL_PREEMPTION_TIME": 1500,
+    "GLOBAL_PREEMPTION_TIME": 500,
     "PREEMPTION_TIME": 1000
 }
