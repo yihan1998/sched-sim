@@ -92,7 +92,7 @@ class SubTask(Task):
         if self.time_left <= 0 and (stop_condition is None or stop_condition()):
             self.complete = True
             self.completion_time = self.state.timer.get_time()
-            logging.debug("[COMPLETE]: Subtask of job {} completed".format(self.identifier))
+            logging.debug(f"[COMPLETE]: Subtask {self} of job {self.identifier} completed")
             self.parent_job.on_complete()
             self.on_complete()
 
@@ -134,10 +134,8 @@ class Job(Task):
             if subtask.rack_id is not None:
                 rack = self.state.racks[subtask.rack_id]
                 rack.schedule(subtask)
-                logging.debug("[SCHEDULE]: Subtask of job {} assigned to Rack {}".format(
-                    self.identifier, subtask.rack_id))
             else:
-                logging.warning("[WARNING]: Subtask of job {} has no rack assigned".format(self.identifier))
+                logging.warning(f"[WARNING]: Subtask {subtask} of job {self.identifier} has no rack assigned")
 
     def on_complete(self):
         self.finished_subtasks += 1

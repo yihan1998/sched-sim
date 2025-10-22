@@ -12,7 +12,6 @@ from task import SubTask, Job
 from worker import Worker
 # from sim_thread import Thread
 from queue import Queue
-# from rack.scheduler import CentralScheduler
 import progress_bar as progress
 from rack import Rack
 
@@ -78,12 +77,8 @@ class SimulationState:
             rack = Rack(i, rack_workers, config, self)
             self.racks.append(rack)
 
-        # Initialize central scheduler when JSQ is enabled (either regular or capacity-aware)
-        # if config.join_shortest_queue or config.join_shortest_estimated_delay_queue:
-        #     self.central_scheduler = CentralScheduler(config, self)
-
         # Set tasks and arrival times
-        request_rate = config.avg_system_load * config.num_workers * config.num_racks / (config.AVERAGE_SERVICE_TIME * config.num_subtasks_per_job)
+        request_rate = config.avg_system_load * config.num_workers / (config.AVERAGE_SERVICE_TIME * config.num_subtasks_per_job)
         next_job_time = int(random.expovariate(request_rate))
         i = 0
         identifier = 1
@@ -112,7 +107,7 @@ class SimulationState:
                         distribution = [500] * 95 + [10500] * 5
                         service_time = random.choice(distribution)
                     elif config.pareto_service_time:
-                        alpha = 2.5
+                        alpha = 2.0
                         target_mean = config.AVERAGE_SERVICE_TIME
                         x_min = target_mean * (alpha - 1) / alpha
                         u = random.random()

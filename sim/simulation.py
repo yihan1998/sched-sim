@@ -119,6 +119,9 @@ class Simulation:
             for worker in self.state.workers:
                 worker.schedule()
 
+            for rack in self.state.racks:
+                rack.scheduler.update_worker_capability()
+
             # Move forward in time
             self.state.timer.increment(1)
 

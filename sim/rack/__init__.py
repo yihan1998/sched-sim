@@ -24,10 +24,11 @@ class Rack:
             workers = self.state.racks[subtask.rack_id].workers
             logging.debug(f"[SCHEDULE]: Workers in Rack {self.identifier}: {workers}")
             chosen_queue = self.scheduler.get_shortest_queue(workers)
+            subtask.worker_id = workers[chosen_queue].identifier
             self.state.queues[chosen_queue].enqueue(subtask)
-            logging.debug(f"[SCHEDULE]: Subtask of job {subtask.identifier} assigned to queue {chosen_queue} on Rack {self.identifier}")
+            logging.debug(f"[SCHEDULE]: Subtask {subtask} of job {subtask.identifier} assigned to queue {chosen_queue} on Rack {self.identifier}")
         elif self.config.global_queue:
             self.state.main_queue.enqueue(subtask)
-            logging.debug(f"[SCHEDULE]: Subtask of job {subtask.identifier} assigned to main queue on Rack {self.identifier}")
+            logging.debug(f"[SCHEDULE]: Subtask {subtask} of job {subtask.identifier} assigned to main queue on Rack {self.identifier}")
         else:
             raise ValueError("No valid scheduling policy selected.")

@@ -6,10 +6,10 @@ files = [
     # "global-ddl-aware-out",
     # "jsq-by-capacity-ddl-aware-out",
     # "jsq-ddl-aware-out",
-    "global-local-preempt-out",
-    # "jsedq-local-preempt-out",
-    # "jsq-local-preempt-out",
-    "global-no-preempt-out",
+    # "global-local-preempt-out",
+    "jsedq-local-preempt-out",
+    "jsq-local-preempt-out",
+    # "global-no-preempt-out",
     # "jsedq-no-preempt-out",
     # "jsq-no-preempt-out"
 ]
@@ -17,10 +17,10 @@ labels = [
     # "Global DDL Aware",
     # "JSEDQ DDL Aware",
     # "JSQ DDL Aware",
-    "Global Local Preempt",
-    # "JSEDQ Local Preempt",
-    # "JSQ Local Preempt",
-    "Global No Preempt",
+    # "Global Local Preempt",
+    "JSEDQ Local Preempt",
+    "JSQ Local Preempt",
+    # "Global No Preempt",
     # "JSEDQ No Preempt",
     # "JSQ No Preempt"
 ]

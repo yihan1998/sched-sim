@@ -1,6 +1,7 @@
 import logging
 from queue import Queue
 from timer import Timer
+from collections import defaultdict, deque
 
 class Worker:
     def __init__(self, given_queue, identifier, config, state):
@@ -13,7 +14,17 @@ class Worker:
 
         self.preemption_timer_on = False
         self.preemption_timer = Timer()
-        self.deadline_signal = False  # Signal for deadline-critical task waiting
+        self.deadline_signal = False
+
+        # Track requeue events per worker
+        self.requeue_history = deque()
+        self.preemption_counts = 0
+
+        self.requeue_history_window = config.REQUEUE_HISTORY_WINDOW if hasattr(config, 'REQUEUE_HISTORY_WINDOW') else 10000
+        self.recent_requeue_counts = 0
+
+        # Log to track preemption times for each task
+        self.preemption_log = defaultdict(list)
 
         self.config = config
         self.state = state
@@ -44,16 +55,49 @@ class Worker:
             self.time_busy += time_increment
             self.task_time += time_increment
 
+    def record_requeue(self, task):
+        """Record a requeue event for a worker and update the preemption log."""
+        current_time = self.state.timer.get_time()
+
+        # Add to requeue history
+        self.requeue_history.append(current_time)
+        self.preemption_counts += 1
+
+        # Update preemption log
+        self.preemption_log[task.identifier].append(current_time)
+
+        # Clean old history outside the window
+        while (self.requeue_history and
+               current_time - self.requeue_history[0] > self.requeue_history_window):
+            self.requeue_history.popleft()
+
+        # Update recent requeue count
+        self.recent_requeue_counts = len(self.requeue_history)
+
+        logging.debug(f"[REQUEUE]: Worker {self.identifier} requeued task {task.identifier}, "
+                     f"recent requeues: {self.recent_requeue_counts}, "
+                     f"preemption log: {self.preemption_log[task.identifier]}")
+
+    def get_preemptions_within_window(self, time_window):
+        """Get the count of preemptions within a given time window."""
+        current_time = self.state.timer.get_time()
+        for task_id, timestamps in self.preemption_log.items():
+            logging.debug(f"[PREEMPTION LOG]: Worker {self.identifier}, Task {task_id}, Timestamps: {timestamps}")
+        count = 0
+        for task_id, timestamps in self.preemption_log.items():
+            # Filter timestamps within the time window
+            count += len([t for t in timestamps if current_time - t <= time_window])
+        return count
+
     def schedule(self, time_increment=1):
         if self.is_busy():
             # Check for deadline signal - preempt current task if deadline-critical task is waiting
             if self.deadline_signal and self.has_priority_task_waiting():
                 logging.debug("[PREEMPT DEADLINE]: Worker {} preempting {} for deadline-critical task".format(self.identifier, self.current_task))
                 
-                # Record requeue event in central scheduler only for capacity-aware scheduling
-                if (hasattr(self.state, 'central_scheduler') and self.state.central_scheduler and 
-                    self.config.join_shortest_estimated_delay_queue):
-                    self.state.central_scheduler.record_requeue(self.identifier, self.current_task)
+                # Record local preemption stats
+                if self.config.local_preemption:
+                    self.record_requeue(self.current_task)
 
                 if self.config.global_queue and self.state.main_queue is not None:
                     self.state.main_queue.enqueue(self.current_task)
@@ -76,11 +120,10 @@ class Worker:
                 if self.preemption_timer.get_time() >= self.config.PREEMPTION_TIME:
                     logging.debug("[PREEMPT]: Worker {} preempting {}".format(self.identifier, self.current_task))
                     
-                    # Record requeue event in central scheduler only for capacity-aware scheduling
-                    if (hasattr(self.state, 'central_scheduler') and self.state.central_scheduler and 
-                        self.config.join_shortest_estimated_delay_queue):
-                        self.state.central_scheduler.record_requeue(self.identifier, self.current_task)
-                    
+                    # Record local preemption stats
+                    if self.config.local_preemption:
+                        self.record_requeue(self.current_task)
+
                     if self.config.global_queue and self.state.main_queue is not None:
                         self.state.main_queue.enqueue(self.current_task)
                         self.current_task = None

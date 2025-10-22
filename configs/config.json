@@ -42,13 +42,13 @@
     "num_subtasks_per_job": 4,
     "deadline_aware_preemption": false,
     "local_preemption": true,
-    "bimodal_service_time": true,
-    "pareto_service_time": false,
+    "bimodal_service_time": false,
+    "pareto_service_time": true,
     "lognormal_service_time": false,
     "join_shortest_queue": false,
-    "join_shortest_estimated_delay_queue": false,
-    "global_queue": true,
+    "join_shortest_estimated_delay_queue": true,
+    "global_queue": false,
     "AVERAGE_SERVICE_TIME": 1000,
-    "GLOBAL_PREEMPTION_TIME": 500,
-    "PREEMPTION_TIME": 1000
+    "GLOBAL_PREEMPTION_TIME": 3000,
+    "PREEMPTION_TIME": 2500
 }
