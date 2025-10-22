@@ -12,7 +12,7 @@ import pathlib
 
 from simulation_state import SimulationState
 from worker import Worker
-from task import SubTask, Job
+from task import Task
 import progress_bar as progress
 from sim_config import SimConfig
 
@@ -30,21 +30,6 @@ class Simulation:
         self.state = SimulationState(configuration)
         self.sim_dir_path = sim_dir_path
 
-        self.on_the_fly_jobs = []
-
-    def check_deadlines(self):
-        """Check active jobs and boost priority for deadline-critical ones."""
-        current_time = self.state.timer.get_time()
-
-        for job in self.on_the_fly_jobs:
-            if not job.complete and job.deadline:
-                time_left = job.deadline - current_time
-                
-                # Boost priority if within threshold
-                if time_left <= self.config.GLOBAL_PREEMPTION_TIME and not job.priority_boost:
-                    job.priority_boost = True
-                    logging.debug(f"[DEADLINE CRITICAL]: Job {job.identifier} has {time_left} units left (deadline: {job.deadline})")
-
     def run(self):
         """Run the simulation."""
 
@@ -52,13 +37,13 @@ class Simulation:
         self.state.initialize_state(self.config)
 
         # A short duration may result in no tasks
-        self.state.jobs_scheduled = len(self.state.jobs)
-        if self.state.jobs_scheduled == 0:
+        self.state.tasks_scheduled = len(self.state.tasks)
+        if self.state.tasks_scheduled == 0:
             return
         
         # Start at first time stamp with an arrival
-        job_number = 0
-        self.state.timer.increment(self.state.jobs[0].arrival_time)
+        task_number = 0
+        self.state.timer.increment(self.state.tasks[0].arrival_time)
 
         if self.config.progress_bar:
             print("\nSimulation started")
@@ -68,19 +53,14 @@ class Simulation:
                 (self.config.sim_duration is None or self.state.timer.get_time() < self.config.sim_duration):
 
             # Put new task arrivals in queues
-            while job_number < self.state.jobs_scheduled and \
-                    self.state.jobs[job_number].arrival_time <= self.state.timer.get_time():
+            while task_number < self.state.tasks_scheduled and \
+                    self.state.tasks[task_number].arrival_time <= self.state.timer.get_time():
 
-                logging.debug("[ARRIVAL]: {}".format(self.state.jobs[job_number]))
+                logging.debug("[ARRIVAL]: {}".format(self.state.tasks[task_number]))
 
-                job = self.state.jobs[job_number]
-                job.process(time_increment=0)
-                self.on_the_fly_jobs.append(job)
-                job_number += 1
-
-            if self.config.deadline_aware_preemption and \
-               self.state.timer.get_time() % self.config.GLOBAL_PREEMPTION_TIME == 0:
-                self.check_deadlines()
+                task = self.state.tasks[task_number]
+                task.process(time_increment=0)
+                task_number += 1
 
             # Schedule threads
             for worker in self.state.workers:
@@ -102,7 +82,6 @@ class Simulation:
         os.makedirs(os.path.dirname(new_dir_name))
         worker_file = open("{}worker_usage.csv".format(new_dir_name, self.config.name), "w")
         task_file = open("{}task_times.csv".format(new_dir_name, self.config.name), "w")
-        job_file = open("{}job_times.csv".format(new_dir_name, self.config.name), "w")
         meta_file = open("{}meta.json".format(new_dir_name), "w")
         stats_file = open("{}stats.json".format(new_dir_name), "w")
 
@@ -113,16 +92,10 @@ class Simulation:
         worker_file.close()
 
         # Write task information
-        task_file.write(','.join(SubTask.get_stat_headers(self.config)) + "\n")
+        task_file.write(','.join(Task.get_stat_headers(self.config)) + "\n")
         for task in self.state.tasks:
             task_file.write(','.join(task.get_stats()) + "\n")
         task_file.close()
-
-        # Write job information
-        job_file.write(','.join(Job.get_stat_headers(self.config)) + "\n")
-        for job in self.state.jobs:
-            job_file.write(','.join(job.get_stats()) + "\n")
-        job_file.close()
 
         # Save the configuration
         json.dump(self.config.__dict__, meta_file, indent=0)

@@ -44,8 +44,8 @@ class Task:
         return self.completion_time - self.arrival_time + 1
     
     def descriptor(self):
-        return "Task (arrival {}, service time {}, original queue: {})".format(
-            self.arrival_time, self.service_time, self.original_queue)
+        return "Task (arrival {}, service time {})".format(
+            self.arrival_time, self.service_time)
 
     def get_stats(self):
         stats = [self.arrival_time, self.time_in_system(), self.service_time]
@@ -65,98 +65,3 @@ class Task:
 
     def __repr__(self):
         return str(self)
-
-class SubTask(Task):
-    def __init__(self, time, arrival_time, config, state, parent_job=None):
-        super().__init__(time, arrival_time, config, state)
-        self.identifier = parent_job.identifier if parent_job is not None else None
-        self.parent_job = parent_job
-
-    def process(self, time_increment=1, stop_condition=None):
-        """Process the task for given time step.
-        :param time_increment: Time step.
-        :param stop_condition: Additional condition that must be met for the task to complete other than no more time
-        left.
-        """
-        if self.time_left == self.service_time:
-            self.start_time = self.state.timer.get_time()
-        self.time_left -= time_increment
-
-        # Any processing that must be done with the decremented timer but before the time left is checked
-        self.process_logic()
-
-        # If no more time left and stop condition is met, complete the task
-        if self.time_left <= 0 and (stop_condition is None or stop_condition()):
-            self.complete = True
-            self.completion_time = self.state.timer.get_time()
-            logging.debug("[COMPLETE]: Subtask of job {} completed".format(self.identifier))
-            self.parent_job.on_complete()
-            self.on_complete()
-
-    def descriptor(self):
-        return "Subtask (id {}, arrival {}, duration {})".format(
-            self.identifier, self.arrival_time, self.service_time)
-
-    def get_stats(self):
-        stats = [self.identifier, self.arrival_time, self.time_in_system(), self.service_time]
-        stats = [str(x) for x in stats]
-        return stats
-
-    @staticmethod
-    def get_stat_headers(config):
-        headers = ["Job ID", "Arrival Time", "Time in System", "Request Service Time"]
-        return headers
-
-class Job(Task):
-    def __init__(self, identifier, time, arrival_time, config, state):
-        super().__init__(time, arrival_time, config, state)
-        self.identifier = identifier
-        self.subtasks = []
-        self.finished_subtasks = 0
-        
-        # Deadline tracking
-        self.priority_boost = False
-        self.deadline = None
-
-    def process(self, time_increment=0):
-        # Set deadline based on total work
-        if self.config.deadline_aware_preemption and self.deadline is None:
-            total_work = sum(st.service_time for st in self.subtasks)
-            self.deadline = self.arrival_time + 1000
-            logging.debug("[DEADLINE SET]: Job {} deadline at {} (total work: {})".format(
-                self.identifier, self.deadline, total_work))
-
-        # Enqueue subtasks
-        for subtask in self.subtasks:
-            if self.config.join_shortest_queue:
-                chosen_queue = self.state.get_shortest_queue()
-                self.state.queues[chosen_queue].enqueue(subtask)
-                logging.debug("[SCHEDULE]: Subtask of job {} assigned to queue {}".format(
-                    self.identifier, chosen_queue))
-
-            elif self.config.global_queue:
-                self.state.main_queue.enqueue(subtask)
-                logging.debug("[SCHEDULE]: Subtask of job {} assigned to main queue".format(
-                    self.identifier))
-
-    def on_complete(self):
-        self.finished_subtasks += 1
-        if self.finished_subtasks == len(self.subtasks):
-            self.complete = True
-            self.completion_time = self.state.timer.get_time()
-            logging.debug("[COMPLETE]: Job {} completed".format(self.identifier))
-            self.state.complete_job_count += 1
-
-    def descriptor(self):
-        return "Job (id {}, arrival {})".format(
-            self.identifier, self.arrival_time)
-
-    def get_stats(self):
-        stats = [self.identifier, self.arrival_time, self.time_in_system()]
-        stats = [str(x) for x in stats]
-        return stats
-
-    @staticmethod
-    def get_stat_headers(config):
-        headers = ["Job ID", "Arrival Time", "Time in System"]
-        return headers

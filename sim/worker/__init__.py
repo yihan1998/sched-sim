@@ -26,7 +26,7 @@ class Worker:
         self.current_task.process(time_increment=time_increment)
         if self.current_task.complete:
             self.current_task = None
-            if self.config.local_preemption and self.preemption_timer_on:
+            if self.config.preemption and self.preemption_timer_on:
                 self.preemption_timer_on = False
                 self.preemption_timer.reset()
 
@@ -59,43 +59,17 @@ class Worker:
 
         else:
             if self.config.global_queue and self.state.main_queue.length() > 0:
-                self.current_task = self.dequeue_with_priority(self.state.main_queue)
-                if self.config.local_preemption:
+                self.current_task = self.state.main_queue.dequeue()
+                if self.config.preemption:
                     self.preemption_timer_on = True
                 logging.debug("[START]: Worker {} starting {}".format(self.id, self.current_task))
                 self.process_task(time_increment=time_increment)
             elif self.config.join_shortest_queue and self.queue.length() > 0:
-                self.current_task = self.dequeue_with_priority(self.queue)
-                if self.config.local_preemption:
+                self.current_task = self.queue.dequeue()
+                if self.config.preemption:
                     self.preemption_timer_on = True
                 logging.debug("[START]: Worker {} starting {}".format(self.id, self.current_task))
                 self.process_task(time_increment=time_increment)
-
-    def dequeue_with_priority(self, queue):
-        """Dequeue priority task if exists, otherwise normal FIFO."""
-        if not self.config.deadline_aware_preemption:
-            return queue.dequeue()
-        
-        # Look for priority task
-        for i, task in enumerate(queue.queue):  # Changed from queue.tasks to queue.queue
-            if hasattr(task, 'parent_job') and task.parent_job and task.parent_job.priority_boost:
-                logging.debug("[PRIORITY DEQUEUE]: Worker {} dequeuing priority task {}".format(self.id, task))
-                return queue.queue.pop(i)
-        
-        # No priority task, normal dequeue
-        return queue.dequeue()
-
-    def has_priority_task_waiting(self):
-        """Check if queue has a priority task."""
-        queue_to_check = self.state.main_queue if self.config.global_queue else self.queue
-        if not queue_to_check:
-            return False
-        
-        for task in queue_to_check.queue:  # Changed from queue.tasks to queue.queue
-            if hasattr(task, 'parent_job') and task.parent_job and task.parent_job.priority_boost:
-                if hasattr(self.current_task, 'parent_job') and self.current_task.parent_job:
-                    return not self.current_task.parent_job.priority_boost
-        return False
         
     def get_stats(self):
         stats = [self.id, self.time_busy, self.task_time]

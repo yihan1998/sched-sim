@@ -8,7 +8,7 @@ import random
 
 from timer import Timer
 # from work_search_state import WorkSearchState
-from task import SubTask, Job
+from task import Task
 from worker import Worker
 # from sim_thread import Thread
 from queue import Queue
@@ -22,24 +22,21 @@ class SimulationState:
         self.timer = Timer()
         self.workers = []
         self.queues = []
-        self.jobs = []
         self.tasks = []
         self.available_queues = []
         self.main_queue = None
 
         self.tasks_scheduled = 0
-        self.jobs_scheduled = 0
         self.end_time = None
         self.sim_end_time = None
 
         self.complete_task_count = 0
-        self.complete_job_count = 0
 
         self.config = config
 
     def any_incomplete(self):
         """Return true if there are any incomplete tasks for the entire simulation."""
-        return self.complete_job_count < self.jobs_scheduled
+        return self.complete_task_count < self.tasks_scheduled
     
     def initialize_state(self, config):
         """Initialize the simulation state based on the configuration."""
@@ -68,60 +65,44 @@ class SimulationState:
             queue.set_worker(i)
 
         # Set tasks and arrival times
-        request_rate = config.avg_system_load * config.num_workers / (config.AVERAGE_SERVICE_TIME * config.num_subtasks_per_job)
-        next_job_time = int(random.expovariate(request_rate))
+        request_rate = config.avg_system_load * config.num_workers / config.AVERAGE_SERVICE_TIME
+        next_task_time = int(random.expovariate(request_rate))
         i = 0
         identifier = 1
-        while (config.sim_duration is None or next_job_time < config.sim_duration) and \
+        while (config.sim_duration is None or next_task_time < config.sim_duration) and \
             (config.num_tasks is None or i < config.num_tasks):
+
+            service_time = None
             
-            # Create job
-            job = Job(
-                identifier=identifier,
-                time=0,
-                arrival_time=next_job_time,
+            # Generate service time according to distribution
+            while service_time is None or service_time == 0:
+                if config.constant_service_time:
+                    service_time = config.AVERAGE_SERVICE_TIME
+                elif config.bimodal_service_time:
+                    # 95% are 500, 5% are 5500
+                    distribution = [500] * 95 + [5500] * 5
+                    service_time = random.choice(distribution)
+                elif config.pareto_service_time:
+                    alpha = 1.5
+                    target_mean = config.AVERAGE_SERVICE_TIME
+                    x_min = target_mean * (alpha - 1) / alpha
+                    u = random.random()
+                    service_time = x_min / (u ** (1/alpha))
+                else:
+                    service_time = int(random.expovariate(1 / config.AVERAGE_SERVICE_TIME))
+
+            # Create task
+            task = Task(
+                time=int(service_time),
+                arrival_time=next_task_time,
                 config=config,
                 state=self
             )
-            
-            # Create subtasks for this job
-            for j in range(config.num_subtasks_per_job):
-                service_time = None
-                
-                # Generate service time according to distribution
-                while service_time is None or service_time == 0:
-                    if config.constant_service_time:
-                        service_time = config.AVERAGE_SERVICE_TIME
-                    elif config.bimodal_service_time:
-                        # 95% are 500, 5% are 5500
-                        distribution = [500] * 95 + [5500] * 5
-                        service_time = random.choice(distribution)
-                    elif config.pareto_service_time:
-                        alpha = 1.5
-                        target_mean = config.AVERAGE_SERVICE_TIME
-                        x_min = target_mean * (alpha - 1) / alpha
-                        u = random.random()
-                        service_time = x_min / (u ** (1/alpha))
-                    else:
-                        service_time = int(random.expovariate(1 / config.AVERAGE_SERVICE_TIME))
+            self.tasks.append(task)
 
-                # Create subtask
-                subtask = SubTask(
-                    time=int(service_time),
-                    arrival_time=next_job_time,
-                    config=config,
-                    state=self,
-                    parent_job=job
-                )
-                job.subtasks.append(subtask)
-                self.tasks.append(subtask)
-                
-                logging.debug(f"[INIT]: Job {identifier} SubTask {j} (service_time={service_time})")
-            
-            self.jobs.append(job)
-            logging.debug(f"[INIT]: Job {identifier} with {len(job.subtasks)} subtasks at time {next_job_time}")
-            
-            next_job_time += int(random.expovariate(request_rate))
+            logging.debug(f"[INIT]: Task {identifier} (service_time={service_time})")
+
+            next_task_time += int(random.expovariate(request_rate))
             i += 1
             identifier += 1
 
@@ -135,13 +116,13 @@ class SimulationState:
         """Add final global stats to to the simulation state."""
         self.end_time = self.timer.get_time()
         self.tasks_scheduled = len(self.tasks)
-        self.jobs_scheduled = len(self.jobs)
         self.sim_end_time = datetime.datetime.now().strftime("%y-%m-%d_%H:%M:%S")
 
     def results(self):
         """Create a dictionary of important statistics for saving."""
-        stats = {"Completed Jobs": self.complete_job_count,"Completed Tasks": self.complete_task_count,
-                 "Job Scheduled": self.jobs_scheduled, "Tasks Scheduled": self.tasks_scheduled,
-                 "Simulation End Time": self.sim_end_time, "End Time": self.end_time}
+        stats = {"Completed Tasks": self.complete_task_count,
+                 "Tasks Scheduled": self.tasks_scheduled,
+                 "Simulation End Time": self.sim_end_time,
+                 "End Time": self.end_time}
         return stats
         
