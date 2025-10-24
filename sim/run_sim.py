@@ -27,7 +27,7 @@ class SimProcess(multiprocessing.Process):
 
 if __name__ == "__main__":
     time = datetime.now().strftime("%y-%m-%d_%H:%M:%S")
-    loads = list(range(10, 110, 10))
+    loads = list(range(10, 110, 10)) + [85, 93, 95, 97]
     threads = []
     description = ""
 

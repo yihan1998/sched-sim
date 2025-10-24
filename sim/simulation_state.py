@@ -5,6 +5,7 @@ import math
 import datetime
 import logging
 import random
+import scipy.stats as stats
 
 from timer import Timer
 # from work_search_state import WorkSearchState
@@ -79,15 +80,22 @@ class SimulationState:
                 if config.constant_service_time:
                     service_time = config.AVERAGE_SERVICE_TIME
                 elif config.bimodal_service_time:
-                    # 95% are 500, 5% are 5500
-                    distribution = [500] * 95 + [5500] * 5
+                    # 95% are 500, 5% are 10500
+                    distribution = [500] * 95 + [10500] * 5
                     service_time = random.choice(distribution)
                 elif config.pareto_service_time:
-                    alpha = 1.5
+                    alpha = config.PARETO_SHAPE_PARAMETER
                     target_mean = config.AVERAGE_SERVICE_TIME
                     x_min = target_mean * (alpha - 1) / alpha
                     u = random.random()
                     service_time = x_min / (u ** (1/alpha))
+                elif config.normal_service_time:
+                    # Truncated normal distribution: truncation at 0 to inf
+                    mu = config.AVERAGE_SERVICE_TIME
+                    sigma = config.NORMAL_STD_DEV
+                    a, b = (0 - mu) / sigma, float('inf')
+                    trunc_norm = stats.truncnorm(a, b, loc=mu, scale=sigma)
+                    service_time = int(trunc_norm.rvs())
                 else:
                     service_time = int(random.expovariate(1 / config.AVERAGE_SERVICE_TIME))
 

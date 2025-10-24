@@ -45,9 +45,9 @@ def analyze_sim_run(run_name, output_file, print_results=False, time_dropped=0):
     next(task_file) # skip first line
     for line in task_file:
         data = line.split(",")
-        if float(data[1]) > time_dropped * stats["End Time"] and float(data[2]) >= 0:
+        if float(data[0]) > time_dropped * stats["End Time"] and float(data[1]) >= 0:
             total_tasks += 1
-            task_latencies.append(float(data[2]))
+            task_latencies.append(float(data[1]))
     task_percentiles = np.percentile(task_latencies, [25, 50, 75, 90, 95, 99, 99.9])
     task_average_latency = np.mean(task_latencies)
     task_min_latency = np.min(task_latencies)
